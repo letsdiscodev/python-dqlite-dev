@@ -1,0 +1,79 @@
+# 3-node dqlite test cluster.
+#
+# By default this pulls the published image
+# ``letsdiscodev/dqlite:0.1.0-patched-null`` (built from the
+# ``Dockerfile`` next to this file: canonical/dqlite v1.18.5 + the
+# NULL-type-preservation patch tracked at
+# https://github.com/canonical/dqlite/issues/882). To rebuild from
+# source:
+#
+#   docker compose build
+#   docker compose up -d
+#
+# Host port mapping uses the 19001-19003 range so the cluster does
+# not collide with anything else listening on 9001-9003 on the host.
+# Container-internal ports remain 9001-9003 so node-to-node Raft
+# traffic uses the canonical addresses.
+
+services:
+  node1:
+    image: letsdiscodev/dqlite:0.1.0-patched-null
+    build: .
+    container_name: dqlite-node1
+    hostname: node1
+    ports:
+      - "19001:9001"
+    environment:
+      - NODE_ID=1
+      - PORT=9001
+      - API_PORT=8001
+      - BOOTSTRAP=true
+    volumes:
+      - node1-data:/data
+    healthcheck:
+      test: ["CMD", "/app/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  node2:
+    image: letsdiscodev/dqlite:0.1.0-patched-null
+    build: .
+    container_name: dqlite-node2
+    hostname: node2
+    ports:
+      - "19002:9002"
+    environment:
+      - NODE_ID=2
+      - PORT=9002
+      - API_PORT=8002
+      - JOIN=node1:9001
+    volumes:
+      - node2-data:/data
+    depends_on:
+      node1:
+        condition: service_healthy
+
+  node3:
+    image: letsdiscodev/dqlite:0.1.0-patched-null
+    build: .
+    container_name: dqlite-node3
+    hostname: node3
+    ports:
+      - "19003:9003"
+    environment:
+      - NODE_ID=3
+      - PORT=9003
+      - API_PORT=8003
+      - JOIN=node1:9001
+    volumes:
+      - node3-data:/data
+    depends_on:
+      node1:
+        condition: service_healthy
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

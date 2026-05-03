@@ -1,0 +1,61 @@
+From: dqlite-dev test cluster
+Subject: query.c: preserve SQLITE_NULL for NULL cells in declared-type columns
+
+Upstream issue: https://github.com/canonical/dqlite/issues/882
+
+dqlite's value_type() looks at the column's declared type
+(``DATETIME``, ``BOOLEAN``) and remaps the cell to the corresponding
+dqlite-specific wire tag (``DQLITE_ISO8601`` / ``DQLITE_BOOLEAN``).
+The remap is correct for non-NULL cells but ALSO fires for NULL
+cells, so a NULL in a ``BOOLEAN`` column was emitted as
+``DQLITE_BOOLEAN`` with payload ``0`` (decodes client-side as ``False``)
+and a NULL in a ``DATETIME`` column was emitted as ``DQLITE_ISO8601``
+with payload ``""`` (decodes client-side as the empty string). NULL
+became indistinguishable from ``False`` / ``""`` on the wire.
+
+The fix: short-circuit on ``SQLITE_NULL`` BEFORE the declared-type
+remap so NULL cells keep the wire tag ``SQLITE_NULL`` regardless of
+the declared column type. The two ``dqlite_assert`` lines further
+down lose their ``|| type == SQLITE_NULL`` arm now that NULL never
+reaches them.
+
+Apply against: canonical/dqlite at v1.18.5 (commit a3c8065).
+
+---
+ src/query.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/query.c b/src/query.c
+index afa104b..3181eae 100644
+--- a/src/query.c
++++ b/src/query.c
+@@ -8,6 +8,14 @@
+ static int value_type(sqlite3_stmt *stmt, int i)
+ {
+ 	int type = sqlite3_column_type(stmt, i);
++
++	/* Always return NULL type for NULL values, regardless of declared
++	 * column type. This ensures clients can distinguish NULL from zero
++	 * values (e.g., NULL vs FALSE for BOOLEAN, NULL vs "" for DATETIME). */
++	if (type == SQLITE_NULL) {
++		return SQLITE_NULL;
++	}
++
+ 	const char *column_type_name = sqlite3_column_decltype(stmt, i);
+ 	if (column_type_name != NULL) {
+ 		if ((strcasecmp(column_type_name, "DATETIME") == 0) ||
+@@ -16,12 +24,11 @@ static int value_type(sqlite3_stmt *stmt, int i)
+ 			if (type == SQLITE_INTEGER) {
+ 				type = DQLITE_UNIXTIME;
+ 			} else {
+-				dqlite_assert(type == SQLITE_TEXT ||
+-				       type == SQLITE_NULL);
++				dqlite_assert(type == SQLITE_TEXT);
+ 				type = DQLITE_ISO8601;
+ 			}
+ 		} else if (strcasecmp(column_type_name, "BOOLEAN") == 0) {
+-			dqlite_assert(type == SQLITE_INTEGER || type == SQLITE_NULL);
++			dqlite_assert(type == SQLITE_INTEGER);
+ 			type = DQLITE_BOOLEAN;
+ 		}
+ 	}
