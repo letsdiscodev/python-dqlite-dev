@@ -5,27 +5,29 @@
 # Reads the node-shape from environment variables passed by
 # docker-compose.yml:
 #
-#   NODE_ID    Numeric Raft node id (1, 2, 3 in the default cluster).
-#   PORT       Container-internal Raft / database port (9001-9003).
-#   API_PORT   Container-internal HTTP API port (8001-8003).
-#   BOOTSTRAP  "true" only on the seed node; absent on followers.
-#   JOIN       host:port of any existing node, used by followers to
-#              join the cluster. Ignored when BOOTSTRAP=true.
+#   NODE_ID       Numeric Raft node id (1, 2, 3 in the default cluster).
+#   PORT          Container-listening Raft / database port (19001-19003 on
+#                 host network).
+#   API_PORT      Container-listening HTTP API port (18001-18003).
+#   BIND_ADDRESS  Address dqlite-demo binds to AND advertises to peers
+#                 (e.g. ``127.0.0.1:19001``). Required.
+#   BOOTSTRAP     "true" only on the seed node; absent on followers.
+#   JOIN          Bind-address of any existing node, used by followers
+#                 to join the cluster. Ignored when BOOTSTRAP=true.
 #
 # Data persists in /data/node${NODE_ID}, mounted from the
 # node${N}-data volume in compose so an ``up -d`` after ``down``
-# resumes the same Raft log.
+# resumes the same Raft log. Wipe with ``docker compose down -v``.
 
 set -e
 
 DATA_DIR="/data/node${NODE_ID}"
 mkdir -p "$DATA_DIR"
 
-# Bind on all container interfaces so node-to-node traffic and the
-# host-mapped ports both work. The address dqlite advertises to its
-# Raft peers comes from this binding — peers reach each other via
-# the docker-compose service hostnames (node1, node2, node3).
-BIND_ADDRESS="0.0.0.0:${PORT}"
+if [ -z "$BIND_ADDRESS" ]; then
+    echo "ERROR: BIND_ADDRESS not set" >&2
+    exit 1
+fi
 
 if [ "$BOOTSTRAP" = "true" ]; then
     echo "Starting bootstrap node (id=${NODE_ID}) at ${BIND_ADDRESS}"

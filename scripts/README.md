@@ -43,8 +43,9 @@ failure list at the end.
 ### Cluster env vars
 
 The integration suites read `DQLITE_TEST_CLUSTER` (single bootstrap
-address) and `DQLITE_TEST_CLUSTER_NODES` (comma-separated node list).
-The runner exports both before invoking pytest, pointing at the
-host-mapped ports `19001-19003` defined in
-`cluster/docker-compose.yml`. Running pytest by hand against the same
-cluster needs the same exports — see `cluster/README.md`.
+address, default `localhost:9001`) and `DQLITE_TEST_CLUSTER_NODES`
+(comma-separated node list, default `localhost:9001,localhost:9002,
+localhost:9003`). The cluster runs on these canonical ports, so
+the defaults match the cluster's bind addresses — running pytest
+by hand needs no env-var overrides. The runner exports both anyway
+to keep the contract obvious.

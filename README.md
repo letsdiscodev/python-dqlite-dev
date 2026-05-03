@@ -79,8 +79,8 @@ cd python-dqlite-dev
 
 That will:
 
-1. Start the 3-node cluster from `cluster/docker-compose.yml` (host
-   ports 19001-19003).
+1. Start the 3-node cluster from `cluster/docker-compose.yml`
+   (host networking on the canonical 9001-9003 dqlite ports).
 2. Wait for each node to listen.
 3. Run ruff + mypy + pytest against every sibling package found in
    the parent directory.
@@ -96,12 +96,13 @@ Other modes:
 ./scripts/run-tests.sh --no-lint      # skip ruff + mypy
 ```
 
-To run a single package's tests by hand against this cluster, export
-the same env vars `run-tests.sh` does:
+To run a single package's tests by hand against this cluster, no
+env vars are needed — the integration suites default to
+`localhost:9001` (single-node) and `localhost:9001,localhost:9002,
+localhost:9003` (full node list) which match the cluster's bind
+addresses:
 
 ```bash
-export DQLITE_TEST_CLUSTER=localhost:19001
-export DQLITE_TEST_CLUSTER_NODES=localhost:19001,localhost:19002,localhost:19003
 cd ../python-dqlite-client && uv run pytest tests/integration/
 ```
 
@@ -114,10 +115,12 @@ image's provenance (canonical/dqlite v1.18.5 + a local patch for
 - **testlib v0** — `TestClusterControl` (transfer leadership, kill /
   restart nodes) so the leader-flip / pre-ping-recovery tests
   currently skipped across the four packages can run end-to-end.
-- **Cluster address advertisement fix** — nodes currently advertise
-  `0.0.0.0:9001` on the bridge network, which is unreachable from the
-  docker host. Several integration tests are skipped on that gap; the
-  fix is in `cluster/`.
+- **Un-skip the `test_cluster_admin_methods_live` integration test**
+  in `python-dqlite-client` (and the analogous skipped tests in
+  `sqlalchemy-dqlite`). The address-advertisement issue that
+  blocked them is fixed by this repo's host-networking cluster, but
+  the skip markers were added under the old setup and need to be
+  lifted.
 
 ## License
 

@@ -13,7 +13,7 @@
 set -e
 
 TIMEOUT=${1:-60}
-HOST_PORTS="19001 19002 19003"
+HOST_PORTS="9001 9002 9003"
 
 echo "Waiting for dqlite cluster to be ready (timeout: ${TIMEOUT}s)..."
 

@@ -26,10 +26,13 @@ DEV_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE_DIR="$(cd "$DEV_DIR/.." && pwd)"
 COMPOSE_FILE="$DEV_DIR/cluster/docker-compose.yml"
 
-CLUSTER_HOST_PORTS=(19001 19002 19003)
+CLUSTER_HOST_PORTS=(9001 9002 9003)
 
 # The integration suites read these env vars to find the cluster.
-# Mirror the defaults documented in cluster/README.md.
+# The values below mirror the canonical dqlite defaults the test
+# fixtures already use, so the exports are technically redundant for
+# the default ports — but explicit exports make the contract obvious
+# and tolerate any per-test override that reads the env directly.
 export DQLITE_TEST_CLUSTER="localhost:${CLUSTER_HOST_PORTS[0]}"
 export DQLITE_TEST_CLUSTER_NODES="localhost:${CLUSTER_HOST_PORTS[0]},localhost:${CLUSTER_HOST_PORTS[1]},localhost:${CLUSTER_HOST_PORTS[2]}"
 

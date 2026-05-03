@@ -19,16 +19,22 @@ docker compose down -v   # -v wipes the per-node data volumes
 
 ## Cluster shape
 
-| Service | Container hostname | Host-mapped port | Raft node id | Role      |
-|---------|--------------------|------------------|--------------|-----------|
-| node1   | node1              | 19001 → 9001     | 1            | Bootstrap |
-| node2   | node2              | 19002 → 9002     | 2            | Voter     |
-| node3   | node3              | 19003 → 9003     | 3            | Voter     |
+| Service | Bind / advertised address | Role      |
+|---------|---------------------------|-----------|
+| node1   | 127.0.0.1:9001            | Bootstrap |
+| node2   | 127.0.0.1:9002            | Voter     |
+| node3   | 127.0.0.1:9003            | Voter     |
 
-Container-internal ports stay at 9001-9003 so node-to-node Raft
-traffic uses the canonical addresses; host-side mapping uses the
-19001-19003 range to avoid colliding with anything else listening on
-9001-9003.
+The cluster runs in `network_mode: host` so the address each node
+advertises (`127.0.0.1:9001` etc.) is reachable from peer
+containers and from a host-side test runner alike. No
+container-to-host port mapping is involved — `localhost:9001`
+inside any container is the same loopback the host sees.
+
+Ports 9001-9003 are dqlite's canonical defaults and match the
+sibling packages' integration-test defaults (`DQLITE_TEST_CLUSTER`
+defaults to `localhost:9001`), so no env-var overrides are needed
+for the standard run.
 
 ## The image
 
@@ -75,14 +81,14 @@ cluster and is serving Raft writes", connect a client and call
 The Python packages' integration tests honour two environment
 variables for cluster discovery:
 
-| Variable                      | Default                                                | What it controls                                                  |
-|-------------------------------|--------------------------------------------------------|-------------------------------------------------------------------|
-| `DQLITE_TEST_CLUSTER`         | `localhost:9001`                                       | Single-node bootstrap address (some tests want exactly one entry) |
-| `DQLITE_TEST_CLUSTER_NODES`   | `localhost:19001,localhost:19002,localhost:19003`      | Full host-mapped node list (most fixtures use this)               |
+| Variable                      | Default                                              | What it controls                                                  |
+|-------------------------------|------------------------------------------------------|-------------------------------------------------------------------|
+| `DQLITE_TEST_CLUSTER`         | `localhost:9001`                                     | Single-node bootstrap address (some tests want exactly one entry) |
+| `DQLITE_TEST_CLUSTER_NODES`   | `localhost:9001,localhost:9002,localhost:9003`       | Full node list (most fixtures use this)                           |
 
-The `scripts/run-tests.sh` runner sets both to point at this
-cluster's host-mapped ports, so simply running the runner from a
-checkout of `python-dqlite-dev` with the cluster up is enough.
+These defaults match the cluster's bind addresses, so simply running
+the test runner (or pytest directly) with the cluster up is enough —
+no exports needed.
 
 ## Files
 
@@ -93,14 +99,20 @@ checkout of `python-dqlite-dev` with the cluster up is enough.
 - `scripts/healthcheck.sh` — container healthcheck baked into the image.
 - `scripts/wait-for-cluster.sh` — host-side readiness loop for CI scripts.
 
-## Known limitations
+## Architecture notes
 
-The cluster runs on the docker-compose default bridge network. Nodes
-advertise their bind address back to clients as `0.0.0.0:9001` etc.
-— the container-internal address — which is **not reachable from the
-docker host**. That breaks any client path that follows a
-leader-redirect against this cluster from a host-side test runner;
-see the test-skip notes in the sibling repos
-(`test_query_raw_apis.py`, `test_pool_concurrent_tx_leader_flip.py`,
-`test_cluster_admin_methods_live.py`). Lifting that limitation is
-on the roadmap for this repo.
+- **Host networking, loopback advertisement**: nodes advertise
+  `127.0.0.1:9001` etc. — reachable from peer containers
+  (`localhost` is the same loopback inside any host-network
+  container) and from a host-side test runner. The previous
+  bridge-mode setup advertised `0.0.0.0:9001`, which clients
+  correctly reject as the unspecified IP literal — that is what
+  blocked the leader-flip test family from running.
+- **Distinct ports per node**: required because all three
+  containers share the host's loopback. node1=9001, node2=9002,
+  node3=9003 — same port range as the canonical dqlite defaults.
+- **Auto-generated Raft node ids**: the `dqlite-demo` binary
+  generates node ids on first boot; they are NOT the `NODE_ID`
+  env var (which the in-repo `init-node.sh` only uses for the data
+  subdirectory). Tests that need to address a node by id should
+  read the live id from `ClusterClient.cluster_info()`.

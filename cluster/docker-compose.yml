@@ -10,26 +10,46 @@
 #   docker compose build
 #   docker compose up -d
 #
-# Host port mapping uses the 19001-19003 range so the cluster does
-# not collide with anything else listening on 9001-9003 on the host.
-# Container-internal ports remain 9001-9003 so node-to-node Raft
-# traffic uses the canonical addresses.
+# Networking model
+# ----------------
+#
+# Every container runs in ``network_mode: host`` so the address each
+# node advertises to the rest of the cluster (``127.0.0.1:900N``) is
+# reachable BOTH from sibling nodes and from a test runner sitting on
+# the host. Without host networking, dqlite-demo binds to the
+# container's interface and advertises something a host-side client
+# cannot reach (the bridge-network interface, or the unspecified
+# ``0.0.0.0`` literal that the client correctly rejects). On host
+# networking, ``localhost`` inside any container is the same loopback
+# the host sees, so ``127.0.0.1:9001`` works from every direction —
+# host-side clients reach the leader, followers reach the leader,
+# leader reaches followers. The three nodes use ports 9001-9003,
+# which is the canonical dqlite port range; the four sibling
+# packages' integration tests default to ``localhost:9001`` for the
+# bootstrap address with no env-var overrides needed.
 
 services:
   node1:
     image: letsdiscodev/dqlite:0.1.0-patched-null
     build: .
     container_name: dqlite-node1
-    hostname: node1
-    ports:
-      - "19001:9001"
+    network_mode: host
     environment:
       - NODE_ID=1
       - PORT=9001
       - API_PORT=8001
+      - BIND_ADDRESS=127.0.0.1:9001
       - BOOTSTRAP=true
     volumes:
       - node1-data:/data
+      # Mount the in-repo init script over the baked-in one so this
+      # repo is the ground truth for cluster boot behaviour. Without
+      # the override, the published image's baked-in init-node.sh
+      # advertises ``0.0.0.0:PORT`` (the unspecified literal that
+      # dqlite clients correctly reject). Rebuilding the image
+      # (``docker compose build``) bakes the in-repo script directly
+      # and removes the need for the mount.
+      - ./scripts/init-node.sh:/app/init-node.sh:ro
     healthcheck:
       test: ["CMD", "/app/healthcheck.sh"]
       interval: 5s
@@ -41,16 +61,16 @@ services:
     image: letsdiscodev/dqlite:0.1.0-patched-null
     build: .
     container_name: dqlite-node2
-    hostname: node2
-    ports:
-      - "19002:9002"
+    network_mode: host
     environment:
       - NODE_ID=2
       - PORT=9002
       - API_PORT=8002
-      - JOIN=node1:9001
+      - BIND_ADDRESS=127.0.0.1:9002
+      - JOIN=127.0.0.1:9001
     volumes:
       - node2-data:/data
+      - ./scripts/init-node.sh:/app/init-node.sh:ro
     depends_on:
       node1:
         condition: service_healthy
@@ -59,16 +79,16 @@ services:
     image: letsdiscodev/dqlite:0.1.0-patched-null
     build: .
     container_name: dqlite-node3
-    hostname: node3
-    ports:
-      - "19003:9003"
+    network_mode: host
     environment:
       - NODE_ID=3
       - PORT=9003
       - API_PORT=8003
-      - JOIN=node1:9001
+      - BIND_ADDRESS=127.0.0.1:9003
+      - JOIN=127.0.0.1:9001
     volumes:
       - node3-data:/data
+      - ./scripts/init-node.sh:/app/init-node.sh:ro
     depends_on:
       node1:
         condition: service_healthy
