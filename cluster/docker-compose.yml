@@ -93,7 +93,44 @@ services:
       node1:
         condition: service_healthy
 
+  # Optional 4th node, started on demand via the ``spare`` profile.
+  # Used by ``TestClusterControl.start_spare_node()`` /
+  # ``stop_spare_node()`` to test live Raft membership operations
+  # (assign_role to/from VOTER, etc.) that need a real
+  # process catching up via Raft replication.
+  #
+  # Default ``docker compose up -d`` does NOT start node4 because
+  # it carries the ``spare`` profile. Bring it up with:
+  #   docker compose --profile spare up -d node4
+  # Stop + tear it down with:
+  #   docker compose stop node4 && docker compose rm -fv node4
+  #   docker volume rm cluster_node4-data
+  #
+  # node4 self-joins as a Spare via ``--join 127.0.0.1:9001`` (the
+  # init script). Tests that want it as a Voter run ``cluster.
+  # assign_role(node4_id, NodeRole.VOTER)`` after the auto-join.
+  node4:
+    image: letsdiscodev/dqlite:0.1.0-patched-null
+    build: .
+    container_name: dqlite-node4
+    network_mode: host
+    profiles:
+      - spare
+    environment:
+      - NODE_ID=4
+      - PORT=9004
+      - API_PORT=8004
+      - BIND_ADDRESS=127.0.0.1:9004
+      - JOIN=127.0.0.1:9001
+    volumes:
+      - node4-data:/data
+      - ./scripts/init-node.sh:/app/init-node.sh:ro
+    # No depends_on — node4 may be started LONG after the rest of
+    # the cluster is up, and waiting on healthcheck would create a
+    # synthetic dependency we'd have to undo on teardown.
+
 volumes:
   node1-data:
   node2-data:
   node3-data:
+  node4-data:
