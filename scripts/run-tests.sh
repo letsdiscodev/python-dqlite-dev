@@ -18,6 +18,11 @@
 #   ./scripts/run-tests.sh --unit       # unit tests only (no cluster needed)
 #   ./scripts/run-tests.sh --no-lint    # skip ruff + mypy
 #   ./scripts/run-tests.sh --no-cluster # tests against an already-running cluster
+#   ./scripts/run-tests.sh --optimize   # also run unit suite under PYTHONOPTIMIZE=1
+#                                        # to catch load-bearing ``assert`` statements
+#                                        # that would silently disappear under ``python -O``.
+#                                        # Runs after the normal suite; opt-in because
+#                                        # the -O run roughly doubles the wall-clock budget.
 
 set -euo pipefail
 
@@ -60,12 +65,14 @@ fi
 UNIT_ONLY=false
 RUN_LINT=true
 START_CLUSTER=true
+RUN_OPTIMIZE=false
 
 for arg in "$@"; do
     case "$arg" in
         --unit)       UNIT_ONLY=true; START_CLUSTER=false ;;
         --no-lint)    RUN_LINT=false ;;
         --no-cluster) START_CLUSTER=false ;;
+        --optimize)   RUN_OPTIMIZE=true ;;
         --help|-h)
             sed -n '3,17s/^# \?//p' "$0"
             exit 0
@@ -225,6 +232,41 @@ echo ""
 for pkg in "${PACKAGES[@]}"; do
     run_package_tests "$pkg"
 done
+
+# --- Optional -O smoke job ---
+#
+# ``python -O`` strips ``assert`` statements. Bare asserts that are
+# used purely as defensive invariants (no side-effect on control
+# flow) are fine, but asserts that narrow a subsequent attribute
+# access become a load-bearing precondition that disappears under
+# -O. Run the per-package unit suite under PYTHONOPTIMIZE=1 to
+# surface any such regression. Opt-in via --optimize because the
+# extra run roughly doubles the wall-clock budget. Integration
+# suites are excluded — the cluster path is already covered by
+# the canonical run and -O does not affect wire I/O.
+if [ "$RUN_OPTIMIZE" = true ]; then
+    echo ""
+    log "PYTHONOPTIMIZE=1 smoke (unit tests only)"
+    for pkg in "${PACKAGES[@]}"; do
+        pkg_dir="$WORKSPACE_DIR/$pkg"
+        if [ ! -d "$pkg_dir" ]; then
+            continue
+        fi
+        printf "    %s under -O... " "$pkg"
+        opt_pytest_args=(tests/ -q)
+        if [ -d "$pkg_dir/tests/integration" ]; then
+            opt_pytest_args+=(--ignore=tests/integration)
+        fi
+        if (cd "$pkg_dir" && PYTHONOPTIMIZE=1 uv run pytest "${opt_pytest_args[@]}") \
+                >/dev/null 2>&1; then
+            echo -e "${GREEN}OK${RESET}"
+        else
+            record_fail "$pkg: pytest under PYTHONOPTIMIZE=1"
+            (cd "$pkg_dir" && PYTHONOPTIMIZE=1 uv run pytest "${opt_pytest_args[@]}") 2>&1 \
+                | tail -20
+        fi
+    done
+fi
 
 # --- Summary ---
 
