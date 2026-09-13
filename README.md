@@ -12,8 +12,9 @@ Development-environment glue for the four-package Python dqlite stack:
   — SQLAlchemy 2.0 dialect (sync `dqlite://` + async `dqlite+aio://`).
 
 This repo contains the dev-environment pieces shared across all four:
-the test cluster (Docker), the cross-package test runner, and (in a
-follow-up) shared test fixtures and a fault-injection helper. None of
+the test cluster (Docker), the cross-package test runner, the shared
+commit-message checker, and the test library that drives the cluster
+(leader transfers, spare nodes) from integration tests. None of
 this ships as a published package — it is a development-only repo
 that contributors clone alongside the four production packages.
 
@@ -31,8 +32,9 @@ that contributors clone alongside the four production packages.
 │   │   └── README.md
 │   ├── scripts/
 │   │   ├── run-tests.sh           # runs lint + tests across all 4 packages
+│   │   ├── check-commit-msg.sh    # commit-message rule shared by the 4 packages
 │   │   └── README.md
-│   └── testlib/                   # placeholder; TestClusterControl lands here
+│   └── testlib/                   # dqlitetestlib: TestClusterControl + fixtures
 ├── python-dqlite-wire/
 ├── python-dqlite-client/
 ├── python-dqlite-dbapi/
@@ -109,18 +111,6 @@ cd ../python-dqlite-client && uv run pytest tests/integration/
 See `cluster/README.md` for cluster shape, ports, and the published
 image's provenance (canonical/dqlite v1.18.5 + a local patch for
 [canonical/dqlite#882](https://github.com/canonical/dqlite/issues/882)).
-
-## Roadmap
-
-- **testlib v0** — `TestClusterControl` (transfer leadership, kill /
-  restart nodes) so the leader-flip / pre-ping-recovery tests
-  currently skipped across the four packages can run end-to-end.
-- **Un-skip the `test_cluster_admin_methods_live` integration test**
-  in `python-dqlite-client` (and the analogous skipped tests in
-  `sqlalchemy-dqlite`). The address-advertisement issue that
-  blocked them is fixed by this repo's host-networking cluster, but
-  the skip markers were added under the old setup and need to be
-  lifted.
 
 ## License
 

@@ -74,7 +74,7 @@ for arg in "$@"; do
         --no-cluster) START_CLUSTER=false ;;
         --optimize)   RUN_OPTIMIZE=true ;;
         --help|-h)
-            sed -n '3,17s/^# \?//p' "$0"
+            sed -n '16,25s/^# \?//p' "$0"
             exit 0
             ;;
         *)

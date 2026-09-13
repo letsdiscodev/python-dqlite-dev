@@ -35,6 +35,7 @@ runner continues.
 ./scripts/run-tests.sh --unit       # unit tests only — skips cluster + integration
 ./scripts/run-tests.sh --no-lint    # skip ruff + mypy
 ./scripts/run-tests.sh --no-cluster # tests against an already-running cluster
+./scripts/run-tests.sh --optimize   # also run the unit suites under PYTHONOPTIMIZE=1
 ```
 
 The runner exits non-zero if any per-package step fails and prints a

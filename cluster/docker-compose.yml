@@ -94,8 +94,8 @@ services:
         condition: service_healthy
 
   # Optional 4th node, started on demand via the ``spare`` profile.
-  # Used by ``TestClusterControl.start_spare_node()`` /
-  # ``stop_spare_node()`` to test live Raft membership operations
+  # Used by ``TestClusterControl.spare_node()`` to test live Raft
+  # membership operations
   # (assign_role to/from VOTER, etc.) that need a real
   # process catching up via Raft replication.
   #
